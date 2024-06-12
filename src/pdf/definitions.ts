@@ -80,11 +80,11 @@ export const getDefinitions = (
         refStack.push(providerReferenceTitle);
         refValuesStack.push(providerReference);
     }
-    if (customerLocalIdentifierValue) {
+    if (customerLocalIdentifierValue && customerLocalIdentifierTitle) {
         refStack.push(customerLocalIdentifierTitle);
         refValuesStack.push(customerLocalIdentifierValue);
     }
-    if (providerLocalIdentifierValue) {
+    if (providerLocalIdentifierValue && providerLocalIdentifierTitle) {
         refStack.push(providerLocalIdentifierTitle);
         refValuesStack.push(providerLocalIdentifierValue);
     }
