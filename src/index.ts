@@ -1,6 +1,6 @@
-import './env';
 import bodyParser from 'body-parser';
 import express, { Application } from 'express';
+import './env';
 import router from './router';
 
 const app: Application = express();

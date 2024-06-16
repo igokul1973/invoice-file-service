@@ -1,4 +1,5 @@
 export const invoicesBucket = 'invoices';
+export const imagesBucket = 'images';
 
 export const fonts = {
     Roboto: {

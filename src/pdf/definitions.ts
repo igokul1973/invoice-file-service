@@ -1,5 +1,5 @@
-import { Template } from '@pdfme/common';
 import { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
+import svg2img from 'svg2img';
 import { TCreatePdfSchema } from '../types';
 
 export enum SchemaKeysEnum {
@@ -22,13 +22,32 @@ export enum SchemaKeysEnum {
     bankingInfo = 'bankingInfo',
     paymentAndDelivery = 'paymentAndDelivery',
 }
-export type TSchemaValue = Template['schemas'][number][string];
-export type TInput = Record<SchemaKeysEnum, TSchemaValue>;
-export interface ITemplate extends Template {
-    schemas: TInput[];
-}
 
-export const getDefinitions = (
+export const imageUrlToBase64 = async (url: string): Promise<string | null> => {
+    const data = await fetch(url);
+    const arrayBuffer = await data.arrayBuffer();
+    const contentType = data.headers.get('content-type');
+    let prefix = 'data:' + contentType + ';base64,';
+    let bufferString = Buffer.from(arrayBuffer).toString('base64');
+    if (contentType === 'image/svg+xml') {
+        // SVG has to be converted to JPEG (like here) or PNG
+        // as PDFMake only accepts these 2 formats.
+        bufferString = await new Promise((resolve, reject) => {
+            svg2img(prefix + bufferString, function (error: Error, buffer: Buffer) {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(buffer.toString('base64'));
+                }
+            });
+        });
+        prefix = 'data:image/jpeg;base64,';
+    }
+
+    return prefix + bufferString;
+};
+
+export const getDefinitions = async (
     data: TCreatePdfSchema['data'],
     { pageSize, pageOrientation, pageMargins }: NonNullable<TCreatePdfSchema['pageSettings']>,
 ) => {
@@ -114,19 +133,21 @@ export const getDefinitions = (
         });
     }
 
+    let logoContent: string | null = null;
+
+    if (logo) {
+        const logoImage = await imageUrlToBase64(logo);
+        logoContent = logoImage;
+    }
+
     const dd: TDocumentDefinitions = {
         pageSize,
         pageOrientation,
         pageMargins,
         header: function (currentPage, pageCount, pageSize) {
             // you can apply any logic and return any valid pdfmake element
-            const content = [
-                // { image: 'src/images/logo.jpeg', width: 60, height: 60, style: 'logo' },
-                // { image: logo || '', width: 60, height: 60, style: 'logo' },
-                { text: providerName, style: 'providerName' },
-                // { canvas: [{ type: 'rect', x: 100, y: 32, w: pageSize.width - 80, h: 40 }] },
-            ];
-            return logo ? [...content, { image: logo, width: 60, height: 60, style: 'logo' }] : content;
+            const content = [{ text: providerName, style: 'providerName' }];
+            return logoContent ? [{ image: logoContent, fit: [50, 300], style: 'logo' }, ...content] : content;
         },
         footer: function (currentPage, pageCount) {
             let content: Content = {

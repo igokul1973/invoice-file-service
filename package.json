@@ -13,24 +13,21 @@
     "pretty": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
-    "@pdfme/common": "^4.0.1",
-    "@pdfme/generator": "^4.0.1",
-    "@pdfme/schemas": "^4.0.1",
     "dotenv": "16.4.5",
     "express": "^4.19.2",
     "get-stream": "^8.0.1",
     "minio": "^8.0.0",
-    "pdf-lib": "^1.17.1",
-    "pdfkit": "^0.15.0",
+    "multer": "^1.4.5-lts.1",
     "pdfmake": "^0.2.10",
+    "svg2img": "^1.0.0-beta.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/multer": "^1.4.11",
     "@tsconfig/node18": "18.2.4",
     "@types/body-parser": "^1.19.5",
     "@types/express": "^4.17.21",
     "@types/node": "^18.2.4",
-    "@types/pdfkit": "^0.13.4",
     "@types/pdfmake": "^0.2.9",
     "@typescript-eslint/eslint-plugin": "^7.10.0",
     "@typescript-eslint/parser": "^7.10.0",
