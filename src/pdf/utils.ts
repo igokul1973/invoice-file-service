@@ -1,13 +1,17 @@
 import { getStreamAsBuffer } from 'get-stream';
+import * as Minio from 'minio';
 import PdfPrinter from 'pdfmake';
 import { TDocumentDefinitions } from 'pdfmake/interfaces';
-import { minioClient } from '../minio/client';
+import { Readable } from 'stream';
+import { minioClient, minioConfig } from '../minio/client';
 import { TCreatePdfSchema } from '../types';
+import { fonts, pdfLinkExpirationSeconds } from './constants';
 import { getDefinitions } from './definitions';
-import { fonts, invoicesBucket } from './fonts/constants';
 
 export const getPdfUrl = async (
-    objectName: string,
+    bucket: string,
+    accountId: string,
+    entityId: string,
     data: TCreatePdfSchema['data'],
     pageParams: NonNullable<TCreatePdfSchema['pageSettings']>,
 ) => {
@@ -25,9 +29,12 @@ export const getPdfUrl = async (
         console.log('Successfully created pdf');
         console.log('Uploading file to minio...');
 
-        const isBucketExists = await minioClient.bucketExists(invoicesBucket);
+        const bucketName = `${bucket}-${accountId}`;
+        const objectName = `${entityId}_invoice.pdf`;
+
+        const isBucketExists = await minioClient.bucketExists(bucketName);
         if (!isBucketExists) {
-            await minioClient.makeBucket(invoicesBucket);
+            await minioClient.makeBucket(bucketName);
         }
         const pdfBuffer = await getStreamAsBuffer(pdf);
         // Set the object metadata
@@ -36,8 +43,8 @@ export const getPdfUrl = async (
             'Content-Type': 'application/pdf',
             'Content-Length': fileSize,
         };
-        await minioClient.putObject(invoicesBucket, objectName, pdfBuffer, fileSize, metaData);
-        const url = await minioClient.presignedUrl('GET', invoicesBucket, objectName, 3600);
+        await minioClient.putObject(bucketName, objectName, pdfBuffer, fileSize, metaData);
+        const url = await minioClient.presignedUrl('GET', bucketName, objectName, pdfLinkExpirationSeconds);
 
         if (!data.qrCode && url) {
             console.log('Adding QR code...');
@@ -51,10 +58,10 @@ export const getPdfUrl = async (
                 'Content-Length': fileSize,
             };
             // Can be done asynchronously without waiting for the result
-            minioClient.putObject(invoicesBucket, objectName, pdfBuffer, fileSize, metaData);
+            minioClient.putObject(bucketName, objectName, pdfBuffer, fileSize, metaData);
         }
 
-        console.log('File is uploaded as object ' + objectName + ' to bucket ' + invoicesBucket);
+        console.log('File is uploaded as object ' + objectName + ' to bucket ' + bucketName);
         return url;
     };
 
@@ -66,7 +73,12 @@ export const getPdfUrl = async (
 };
 
 export const saveFileAndGetUrl = async (
-    file: Express.Multer.File,
+    file: Omit<Express.Multer.File, 'stream' | 'filename' | 'destination' | 'path'> & {
+        stream?: Readable;
+        filename?: string;
+        destination?: string;
+        path?: string;
+    },
     bucket: string,
     accountId: string,
     entityId: string,
@@ -80,6 +92,20 @@ export const saveFileAndGetUrl = async (
     if (!isBucketExists) {
         await minioClient.makeBucket(bucketName);
         console.log('Created new bucket: ' + bucketName);
+        console.log('Setting new bucket policy for anonymous download access for bucket name: ' + bucketName + '...');
+        const anonymousDownloadPolicy = {
+            Version: '2012-10-17',
+            Statement: [
+                {
+                    Action: ['s3:GetObject'],
+                    Effect: 'Allow',
+                    Principal: '*',
+                    Resource: [`arn:aws:s3:::${bucketName}/*`],
+                },
+            ],
+        };
+        minioClient.setBucketPolicy(bucketName, JSON.stringify(anonymousDownloadPolicy));
+        console.log('New bucket policy for anonymous download access is set.');
     }
 
     // Set the object metadata
@@ -89,9 +115,33 @@ export const saveFileAndGetUrl = async (
     };
 
     await minioClient.putObject(bucketName, objectName, file.buffer, file.size, metaData);
-    const url = await minioClient.presignedUrl('GET', bucketName, objectName, 3600);
+    // TODO: later fix the protocol for substitution during MINIO deployment
+    const url = `http://${minioConfig.endPoint}:${minioConfig.port}/${bucketName}/${objectName}`;
 
     console.log('File is uploaded as object ' + objectName + ' to bucket ' + bucketName);
+
+    return url;
+};
+
+export const copyFileAndGetUrl = async (
+    sourcePath: string,
+    bucket: string,
+    accountId: string,
+    entityId: string,
+    fileName: string,
+) => {
+    const bucketName = `${bucket}-${accountId}`;
+    const objectName = `${entityId}_${fileName}`;
+
+    console.log('Copying file...');
+
+    const conds = new Minio.CopyConditions();
+    await minioClient.copyObject(bucketName, objectName, sourcePath, conds);
+
+    console.log('File is copied as object ' + objectName + ' to bucket ' + bucketName);
+
+    // TODO: later fix the protocol for substitution during MINIO deployment
+    const url = `http://${minioConfig.endPoint}:${minioConfig.port}/${bucketName}/${objectName}`;
 
     return url;
 };
@@ -103,9 +153,5 @@ export const deleteFile = async (fileName: string, bucket: string, accountId: st
     console.log('Removing file from minio...');
 
     await minioClient.removeObject(bucketName, objectName);
-    const url = await minioClient.presignedUrl('GET', bucketName, objectName, 3600);
-
-    console.log('File is uploaded as object ' + objectName + ' to bucket ' + bucketName);
-
-    return url;
+    console.log('File ' + objectName + ' is successfully removed from the bucket ' + bucketName);
 };

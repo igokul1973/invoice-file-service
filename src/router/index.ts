@@ -1,7 +1,8 @@
 import express from 'express';
 import multer from 'multer';
+import { copyFileAndGetUrl } from '../pdf/copyFileAndGetUrl';
 import { deleteFile, getPdfUrl, saveFileAndGetUrl } from '../pdf/utils';
-import { pdfCreateSchema } from '../schemas/pdfSchemas';
+import { fileCopySchema, fileCreateSchema, fileDeleteSchema, pdfCreateSchema } from '../schemas/pdfSchemas';
 
 const upload = multer();
 
@@ -10,7 +11,7 @@ const router = express.Router();
 router.post('/create/pdf', async (req, res) => {
     const result = pdfCreateSchema.safeParse(req.body);
     if (result.success) {
-        const { pageSettings, data } = result.data;
+        const { bucket, accountId, entityId, pageSettings, data } = result.data;
         let { pageOrientation, pageMargins, pageSize } = pageSettings ?? {
             pageOrientation: 'portrait',
             pageMargins: 50,
@@ -22,8 +23,7 @@ router.post('/create/pdf', async (req, res) => {
 
         try {
             console.log('Serving pdf to browser...');
-            const destinationObject = `invoice.pdf`;
-            const url = await getPdfUrl(destinationObject, data, { pageMargins, pageSize, pageOrientation });
+            const url = await getPdfUrl(bucket, accountId, entityId, data, { pageMargins, pageSize, pageOrientation });
 
             return res.status(200).send({
                 url,
@@ -42,20 +42,42 @@ router.post('/create/pdf', async (req, res) => {
 });
 
 router.post('/file', upload.single('file'), async (req, res) => {
-    if (
-        !req.file ||
-        Object.keys(req.file).length === 0 ||
-        !req.body.bucket ||
-        !req.body.accountId ||
-        !req.body.entityId
-    ) {
-        return res.status(400).send('You sent wrong data. No files were uploaded.');
+    const result = fileCreateSchema.safeParse({ ...req.body, file: req.file });
+
+    if (!result.success) {
+        return res.status(400).send({
+            error: 'The request did not contain valid parameters',
+            message: result.error.message,
+        });
     }
 
-    const { bucket, accountId, entityId } = req.body;
+    const { file, bucket, accountId, entityId } = result.data;
 
     try {
-        const url = await saveFileAndGetUrl(req.file, bucket, accountId, entityId);
+        const url = await saveFileAndGetUrl(file, bucket, accountId, entityId);
+        return res.status(200).send({ url });
+    } catch (error) {
+        console.log(error);
+        return res.status(400).send({
+            error,
+        });
+    }
+});
+
+router.post('/file/copy', async (req, res) => {
+    const result = fileCopySchema.safeParse(req.body);
+
+    if (!result.success) {
+        return res.status(400).send({
+            error: 'The request did not contain valid parameters',
+            message: result.error.message,
+        });
+    }
+
+    const { sourcePath, bucket, accountId, entityId, fileName } = result.data;
+
+    try {
+        const url = await copyFileAndGetUrl(sourcePath, bucket, accountId, entityId, fileName);
         return res.status(200).send({ url });
     } catch (error) {
         console.log(error);
@@ -66,11 +88,14 @@ router.post('/file', upload.single('file'), async (req, res) => {
 });
 
 router.delete('/file', async (req, res) => {
-    if (!req.body.fileName || !req.body.bucket || !req.body.accountId || !req.body.entityId) {
-        return res.status(400).send('You sent wrong data. No files were uploaded.');
+    const result = fileDeleteSchema.safeParse(req.body);
+    if (!result.success) {
+        return res.status(400).send({
+            error: 'The request did not contain valid parameters',
+            message: result.error.message,
+        });
     }
-
-    const { fileName, bucket, accountId, entityId } = req.body;
+    const { fileName, bucket, accountId, entityId } = result.data;
 
     try {
         await deleteFile(fileName, bucket, accountId, entityId);

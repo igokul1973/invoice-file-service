@@ -1,6 +1,3 @@
-export const invoicesBucket = 'invoices';
-export const imagesBucket = 'images';
-
 export const fonts = {
     Roboto: {
         normal: 'src/pdf/fonts/Roboto-Regular.ttf',
@@ -9,3 +6,5 @@ export const fonts = {
         bolditalics: 'src/pdf/fonts/Roboto-MediumItalic.ttf',
     },
 };
+
+export const pdfLinkExpirationSeconds = 120;

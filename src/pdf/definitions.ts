@@ -56,6 +56,7 @@ export const getDefinitions = async (
         providerName,
         qrCode,
         invoiceTitle,
+        billToTitle,
         customerInfo,
         providerAddress,
         invoiceTable: { headerRow, dataRows, totalRows },
@@ -210,7 +211,7 @@ export const getDefinitions = async (
                     {
                         stack: [
                             {
-                                text: 'Bill To:',
+                                text: billToTitle,
                                 style: 'billTo',
                             },
                             {
@@ -308,6 +309,7 @@ export const getDefinitions = async (
             },
             billTo: {
                 bold: true,
+                fontSize: 10,
                 marginTop: 25,
             },
             customerInfo: {
